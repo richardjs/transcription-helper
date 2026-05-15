@@ -187,7 +187,7 @@
     .btn-set.flash, .btn-end.flash { animation: flash .4s ease-out; }
     @keyframes flash { 0% { filter: brightness(2.2); } 100% { filter: brightness(1); } }
 
-.hints {
+    .hints {
       font-size: 0.72rem; color: #333;
       text-align: center; letter-spacing: 0.03em;
     }
@@ -333,6 +333,8 @@ function applyStart(t) {
     localStorage.setItem('startPt', t);
     btnResume.disabled = false;
     placePip();
+    if (endPt !== null && t >= endPt) applyEnd(null);
+    updateEndBtnState();
   } else {
     localStorage.removeItem('startPt');
     btnResume.disabled = true;
@@ -344,6 +346,10 @@ function placePip() {
   if (startPt === null || !isFinite(audio.duration) || audio.duration === 0) return;
   pip.style.left = `${(startPt / audio.duration) * 100}%`;
   pip.classList.add('show');
+}
+
+function updateEndBtnState() {
+  btnEnd.disabled = startPt !== null && audio.currentTime < startPt;
 }
 
 // ── End point management ──────────────────────────────────────────────────────
@@ -404,6 +410,7 @@ audio.addEventListener('loadedmetadata', () => {
 audio.addEventListener('timeupdate', () => {
   seekEl.value    = audio.currentTime;
   tCur.textContent = fmt(audio.currentTime);
+  updateEndBtnState();
   if (endPt !== null && !audio.paused && audio.currentTime >= endPt) {
     audio.pause();
   }
@@ -423,7 +430,7 @@ audio.addEventListener('ended', () => {
 });
 
 // ── Seek bar ──────────────────────────────────────────────────────────────────
-seekEl.addEventListener('input', () => { audio.currentTime = +seekEl.value; });
+seekEl.addEventListener('input', () => { audio.currentTime = +seekEl.value; updateEndBtnState(); });
 
 // ── Transport ─────────────────────────────────────────────────────────────────
 function nudge(delta) {
