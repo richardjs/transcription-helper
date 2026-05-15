@@ -96,15 +96,17 @@
       border: none; cursor: pointer;
     }
 
-    /* Start-point pip overlay */
+    /* Seek bar pips */
     .pip {
       position: absolute;
       top: 50%; transform: translate(-50%, -50%);
       width: 3px; height: 17px;
-      background: #f59e0b; border-radius: 2px;
+      border-radius: 2px;
       pointer-events: none; display: none;
     }
     .pip.show { display: block; }
+    .pip-start { background: #f59e0b; }
+    .pip-end   { background: #818cf8; }
 
     .times {
       display: flex; justify-content: space-between;
@@ -163,14 +165,18 @@
 
     .btn-set {
       background: #f59e0b; color: #111;
-      flex: 2; min-height: 56px; font-size: 0.82rem;
+      flex: 1; min-height: 56px; font-size: 0.82rem;
+    }
+    .btn-end {
+      background: #818cf8; color: #fff;
+      flex: 1; min-height: 56px; font-size: 0.82rem;
     }
     .btn-resume {
       background: #22c55e; color: #fff;
-      flex: 3; min-height: 72px; font-size: 1rem;
+      width: 100%; min-height: 72px; font-size: 1rem;
     }
 
-    .btn-set.flash { animation: flash .4s ease-out; }
+    .btn-set.flash, .btn-end.flash { animation: flash .4s ease-out; }
     @keyframes flash { 0% { filter: brightness(2.2); } 100% { filter: brightness(1); } }
 
 .hints {
@@ -195,7 +201,8 @@
   <div class="player" id="player">
     <div class="seek-wrap">
       <input type="range" class="seek" id="seek" min="0" max="1" step="any" value="0">
-      <div class="pip" id="pip"></div>
+      <div class="pip pip-start" id="pip"></div>
+      <div class="pip pip-end"   id="pipEnd"></div>
     </div>
     <div class="times">
       <span id="tCur">0:00</span>
@@ -212,11 +219,12 @@
 
   <div class="actions">
     <div class="btn-row">
-      <button class="btn-big btn-set"    id="btnSet"    disabled>&#9679; Set Point</button>
-      <button class="btn-big btn-resume" id="btnResume" disabled>&#9654; Resume from Point</button>
+      <button class="btn-big btn-set" id="btnSet" disabled>&#9679; Set Start</button>
+      <button class="btn-big btn-end" id="btnEnd" disabled>&#9679; Set End</button>
     </div>
+    <button class="btn-big btn-resume" id="btnResume" disabled>&#9654; Resume from Point</button>
   </div>
-  <p class="hints">Space &nbsp;play/pause &nbsp;·&nbsp; S &nbsp;set point &nbsp;·&nbsp; R &nbsp;resume &nbsp;·&nbsp; &#8592;&#8594; &nbsp;nudge 1s</p>
+  <p class="hints">Space &nbsp;resume/pause &nbsp;·&nbsp; S &nbsp;set start &nbsp;·&nbsp; E &nbsp;set end &nbsp;·&nbsp; R &nbsp;resume &nbsp;·&nbsp; &#8592;&#8594; &nbsp;nudge 1s</p>
 </div>
 
 <audio id="audio"></audio>
@@ -265,6 +273,7 @@ const upSub    = document.getElementById('upSub');
 const player   = document.getElementById('player');
 const seekEl   = document.getElementById('seek');
 const pip      = document.getElementById('pip');
+const pipEnd   = document.getElementById('pipEnd');
 const tCur     = document.getElementById('tCur');
 const tDur     = document.getElementById('tDur');
 const playBtn   = document.getElementById('playBtn');
@@ -273,10 +282,12 @@ const fwd       = document.getElementById('fwd');
 const nudgeBack = document.getElementById('nudgeBack');
 const nudgeFwd  = document.getElementById('nudgeFwd');
 const btnSet   = document.getElementById('btnSet');
+const btnEnd   = document.getElementById('btnEnd');
 const btnResume= document.getElementById('btnResume');
 const audio    = document.getElementById('audio');
 
 let startPt = null;   // seconds | null
+let endPt   = null;   // seconds | null
 let blobURL = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -295,6 +306,7 @@ function showClip(blob, name) {
   upload.classList.add('loaded');
   player.classList.add('show');
   btnSet.disabled = false;
+  btnEnd.disabled = false;
 }
 
 // ── Start point management ────────────────────────────────────────────────────
@@ -317,12 +329,31 @@ function placePip() {
   pip.classList.add('show');
 }
 
+// ── End point management ──────────────────────────────────────────────────────
+function applyEnd(t) {
+  endPt = t;
+  if (t !== null) {
+    localStorage.setItem('endPt', t);
+    placeEndPip();
+  } else {
+    localStorage.removeItem('endPt');
+    pipEnd.classList.remove('show');
+  }
+}
+
+function placeEndPip() {
+  if (endPt === null || !isFinite(audio.duration) || audio.duration === 0) return;
+  pipEnd.style.left = `${(endPt / audio.duration) * 100}%`;
+  pipEnd.classList.add('show');
+}
+
 // ── File input ────────────────────────────────────────────────────────────────
 fileIn.addEventListener('change', e => {
   const f = e.target.files[0];
   if (!f) return;
   showClip(f, f.name);
   applyStart(null);
+  applyEnd(null);
   dbSave(f, f.name);
 });
 
@@ -338,6 +369,7 @@ upload.addEventListener('drop', e => {
   if (!f?.type.startsWith('audio/')) return;
   showClip(f, f.name);
   applyStart(null);
+  applyEnd(null);
   dbSave(f, f.name);
 });
 
@@ -345,13 +377,18 @@ upload.addEventListener('drop', e => {
 audio.addEventListener('loadedmetadata', () => {
   seekEl.max      = audio.duration;
   tDur.textContent = fmt(audio.duration);
-  const saved = localStorage.getItem('startPt');
-  if (saved !== null) applyStart(parseFloat(saved));
+  const savedStart = localStorage.getItem('startPt');
+  if (savedStart !== null) applyStart(parseFloat(savedStart));
+  const savedEnd = localStorage.getItem('endPt');
+  if (savedEnd !== null) applyEnd(parseFloat(savedEnd));
 });
 
 audio.addEventListener('timeupdate', () => {
   seekEl.value    = audio.currentTime;
   tCur.textContent = fmt(audio.currentTime);
+  if (endPt !== null && !audio.paused && audio.currentTime >= endPt) {
+    audio.pause();
+  }
 });
 
 audio.addEventListener('play',  () => {
@@ -385,8 +422,15 @@ nudgeFwd.addEventListener('click',  () => nudge(+1));
 btnSet.addEventListener('click', () => {
   applyStart(audio.currentTime);
   btnSet.classList.remove('flash');
-  void btnSet.offsetWidth; // restart animation
+  void btnSet.offsetWidth;
   btnSet.classList.add('flash');
+});
+
+btnEnd.addEventListener('click', () => {
+  applyEnd(audio.currentTime);
+  btnEnd.classList.remove('flash');
+  void btnEnd.offsetWidth;
+  btnEnd.classList.add('flash');
 });
 
 function resumeOrPause() {
@@ -415,6 +459,14 @@ document.addEventListener('keydown', e => {
         btnSet.classList.remove('flash');
         void btnSet.offsetWidth;
         btnSet.classList.add('flash');
+      }
+      break;
+    case 'KeyE':
+      if (!btnEnd.disabled) {
+        applyEnd(audio.currentTime);
+        btnEnd.classList.remove('flash');
+        void btnEnd.offsetWidth;
+        btnEnd.classList.add('flash');
       }
       break;
     case 'KeyR':
