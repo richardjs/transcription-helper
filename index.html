@@ -181,8 +181,20 @@
     }
     .btn-resume {
       background: #22c55e; color: #fff;
-      width: 100%; min-height: 288px; font-size: 1rem;
+      width: 100%; min-height: 220px; font-size: 1rem;
     }
+
+    .speed-row {
+      display: flex; gap: 0.4rem;
+    }
+    .btn-speed {
+      flex: 1; background: none; border: 1px solid #222;
+      color: #555; border-radius: 10px;
+      padding: 0.55rem 0; font-size: 0.85rem;
+      cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+    }
+    .btn-speed:hover { color: #aaa; border-color: #3a3a3a; }
+    .btn-speed.active { background: #2a2a2a; color: #ddd; border-color: #3a3a3a; }
 
     .btn-set.flash, .btn-end.flash { animation: flash .4s ease-out; }
     @keyframes flash { 0% { filter: brightness(2.2); } 100% { filter: brightness(1); } }
@@ -237,6 +249,11 @@
       </button>
     </div>
     <button class="btn-big btn-resume" id="btnResume" disabled>&#9654; Resume from Point</button>
+    <div class="speed-row">
+      <button class="btn-speed" data-rate="0.5">0.5×</button>
+      <button class="btn-speed" data-rate="0.75">0.75×</button>
+      <button class="btn-speed active" data-rate="1">1×</button>
+    </div>
   </div>
   <p class="hints">Space &nbsp;resume/pause &nbsp;·&nbsp; S &nbsp;set start &nbsp;·&nbsp; E &nbsp;set end &nbsp;·&nbsp; R &nbsp;resume &nbsp;·&nbsp; &#8592;&#8594; &nbsp;nudge 1s</p>
 </div>
@@ -468,6 +485,14 @@ function resumeOrPause() {
 }
 
 btnResume.addEventListener('click', resumeOrPause);
+
+document.querySelectorAll('.btn-speed').forEach(btn => {
+  btn.addEventListener('click', () => {
+    audio.playbackRate = parseFloat(btn.dataset.rate);
+    document.querySelectorAll('.btn-speed').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
 
 
 // Blur buttons after click so keyboard shortcuts work immediately after
