@@ -116,16 +116,24 @@
     /* Transport */
     .transport {
       display: flex; justify-content: center;
-      align-items: center; gap: 1rem;
+      align-items: center; gap: 0.5rem;
     }
     .skip {
       background: none; border: 1px solid #282828;
       color: #666; border-radius: 8px;
-      padding: 0.5rem 0.85rem; font-size: 0.82rem;
+      padding: 0.5rem 0.75rem; font-size: 0.82rem;
       cursor: pointer; transition: color .15s, border-color .15s;
       min-height: 38px;
     }
     .skip:hover { color: #aaa; border-color: #3a3a3a; }
+    .nudge {
+      background: none; border: 1px solid #222;
+      color: #4a4a4a; border-radius: 8px;
+      padding: 0.4rem 0.6rem; font-size: 0.75rem;
+      cursor: pointer; transition: color .15s, border-color .15s;
+      min-height: 34px;
+    }
+    .nudge:hover { color: #999; border-color: #333; }
 
     .play-btn {
       width: 48px; height: 48px; border-radius: 50%;
@@ -204,9 +212,11 @@
       <span id="tDur">0:00</span>
     </div>
     <div class="transport">
-      <button class="skip" id="back">&#9664; 10s</button>
+      <button class="skip"  id="back">&#9664; 5s</button>
+      <button class="nudge" id="nudgeBack">&#9664; 1s</button>
       <button class="play-btn" id="playBtn">&#9654;</button>
-      <button class="skip" id="fwd">10s &#9654;</button>
+      <button class="nudge" id="nudgeFwd">1s &#9654;</button>
+      <button class="skip"  id="fwd">5s &#9654;</button>
     </div>
   </div>
 
@@ -217,7 +227,7 @@
     </div>
     <button class="btn-reset" id="btnReset" disabled>Reset point</button>
   </div>
-  <p class="hints">Space &nbsp;play/pause &nbsp;·&nbsp; S &nbsp;set point &nbsp;·&nbsp; R &nbsp;resume</p>
+  <p class="hints">Space &nbsp;play/pause &nbsp;·&nbsp; S &nbsp;set point &nbsp;·&nbsp; R &nbsp;resume &nbsp;·&nbsp; &#8592;&#8594; &nbsp;nudge 1s</p>
 </div>
 
 <audio id="audio"></audio>
@@ -268,9 +278,11 @@ const seekEl   = document.getElementById('seek');
 const pip      = document.getElementById('pip');
 const tCur     = document.getElementById('tCur');
 const tDur     = document.getElementById('tDur');
-const playBtn  = document.getElementById('playBtn');
-const back     = document.getElementById('back');
-const fwd      = document.getElementById('fwd');
+const playBtn   = document.getElementById('playBtn');
+const back      = document.getElementById('back');
+const fwd       = document.getElementById('fwd');
+const nudgeBack = document.getElementById('nudgeBack');
+const nudgeFwd  = document.getElementById('nudgeFwd');
 const btnSet   = document.getElementById('btnSet');
 const btnResume= document.getElementById('btnResume');
 const btnReset = document.getElementById('btnReset');
@@ -364,9 +376,15 @@ audio.addEventListener('ended', () => { playBtn.innerHTML = '&#9654;'; });
 seekEl.addEventListener('input', () => { audio.currentTime = +seekEl.value; });
 
 // ── Transport ─────────────────────────────────────────────────────────────────
-playBtn.addEventListener('click', () => audio.paused ? audio.play() : audio.pause());
-back.addEventListener('click', () => { audio.currentTime = Math.max(0, audio.currentTime - 10); });
-fwd.addEventListener('click',  () => { audio.currentTime = Math.min(audio.duration, audio.currentTime + 10); });
+function nudge(delta) {
+  audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + delta));
+}
+
+playBtn.addEventListener('click',   () => audio.paused ? audio.play() : audio.pause());
+back.addEventListener('click',      () => nudge(-5));
+fwd.addEventListener('click',       () => nudge(+5));
+nudgeBack.addEventListener('click', () => nudge(-1));
+nudgeFwd.addEventListener('click',  () => nudge(+1));
 
 // ── Action buttons ────────────────────────────────────────────────────────────
 btnSet.addEventListener('click', () => {
@@ -403,6 +421,14 @@ document.addEventListener('keydown', e => {
       break;
     case 'KeyR':
       if (!btnResume.disabled) btnResume.click();
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      nudge(-1);
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      nudge(+1);
       break;
   }
 });
