@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Transcription Helper</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #111;
+      color: #ddd;
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      gap: 1rem;
+    }
+
+    h1 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      color: #444;
+      text-transform: uppercase;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* --- Upload zone --- */
+    .upload {
+      background: #1a1a1a;
+      border: 2px dashed #333;
+      border-radius: 12px;
+      padding: 1.4rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      transition: border-color .15s, background .15s;
+      user-select: none;
+    }
+    .upload:hover        { border-color: #555; background: #1d1d1d; }
+    .upload.drag         { border-color: #f59e0b; background: #1f1a10; }
+    .upload.loaded       { border-style: solid; border-color: #252525; }
+    .upload input {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      opacity: 0; cursor: pointer;
+    }
+    .up-title {
+      font-size: 0.95rem; font-weight: 600; color: #ccc;
+      margin-bottom: 0.2rem; word-break: break-all;
+      pointer-events: none;
+    }
+    .up-sub { font-size: 0.8rem; color: #555; pointer-events: none; }
+
+    /* --- Player --- */
+    .player {
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: none;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .player.show { display: flex; }
+
+    /* Seek bar */
+    .seek-wrap { position: relative; padding: 7px 0; }
+
+    .seek {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%; height: 5px;
+      border-radius: 3px;
+      background: #2a2a2a;
+      cursor: pointer; outline: none;
+      display: block;
+    }
+    .seek::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 17px; height: 17px;
+      border-radius: 50%; background: #ddd; cursor: pointer;
+    }
+    .seek::-moz-range-thumb {
+      width: 17px; height: 17px;
+      border-radius: 50%; background: #ddd;
+      border: none; cursor: pointer;
+    }
+
+    /* Start-point pip overlay */
+    .pip {
+      position: absolute;
+      top: 50%; transform: translate(-50%, -50%);
+      width: 3px; height: 17px;
+      background: #f59e0b; border-radius: 2px;
+      pointer-events: none; display: none;
+    }
+    .pip.show { display: block; }
+
+    .times {
+      display: flex; justify-content: space-between;
+      font-size: 0.78rem; color: #555;
+      font-variant-numeric: tabular-nums;
+      margin-top: -0.5rem;
+    }
+
+    /* Transport */
+    .transport {
+      display: flex; justify-content: center;
+      align-items: center; gap: 1rem;
+    }
+    .skip {
+      background: none; border: 1px solid #282828;
+      color: #666; border-radius: 8px;
+      padding: 0.5rem 0.85rem; font-size: 0.82rem;
+      cursor: pointer; transition: color .15s, border-color .15s;
+      min-height: 38px;
+    }
+    .skip:hover { color: #aaa; border-color: #3a3a3a; }
+
+    .play-btn {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: #ddd; color: #111; border: none;
+      font-size: 1.1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .1s;
+    }
+    .play-btn:hover  { transform: scale(1.06); }
+    .play-btn:active { transform: scale(0.93); }
+
+    /* --- Action buttons --- */
+    .actions { display: flex; flex-direction: column; gap: 0.6rem; }
+
+    .btn-row { display: flex; gap: 0.6rem; align-items: stretch; }
+
+    .btn-big {
+      border: none; border-radius: 14px;
+      font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+      transition: transform .1s, filter .15s;
+    }
+    .btn-big:active:not(:disabled) { transform: scale(0.97); }
+    .btn-big:hover:not(:disabled)  { filter: brightness(1.1); }
+    .btn-big:disabled { opacity: 0.28; cursor: default; }
+
+    .btn-set {
+      background: #f59e0b; color: #111;
+      flex: 2; min-height: 56px; font-size: 0.82rem;
+    }
+    .btn-resume {
+      background: #22c55e; color: #fff;
+      flex: 3; min-height: 72px; font-size: 1rem;
+    }
+
+    .btn-set.flash { animation: flash .4s ease-out; }
+    @keyframes flash { 0% { filter: brightness(2.2); } 100% { filter: brightness(1); } }
+
+    .btn-reset {
+      background: none; border: none; color: #3a3a3a;
+      font-size: 0.82rem; cursor: pointer;
+      text-decoration: underline; text-underline-offset: 3px;
+      padding: 0.3rem; align-self: center;
+      transition: color .15s;
+    }
+    .btn-reset:hover:not(:disabled) { color: #ef4444; }
+    .btn-reset:disabled { opacity: 0.3; cursor: default; }
+
+    audio { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>Transcription Helper</h1>
+
+<div class="wrap">
+  <div class="upload" id="upload">
+    <input type="file" id="fileInput" accept="audio/*">
+    <div class="up-title" id="upTitle">Tap to upload audio</div>
+    <div class="up-sub"   id="upSub">or drag and drop a file</div>
+  </div>
+
+  <div class="player" id="player">
+    <div class="seek-wrap">
+      <input type="range" class="seek" id="seek" min="0" max="1" step="any" value="0">
+      <div class="pip" id="pip"></div>
+    </div>
+    <div class="times">
+      <span id="tCur">0:00</span>
+      <span id="tDur">0:00</span>
+    </div>
+    <div class="transport">
+      <button class="skip" id="back">&#9664; 10s</button>
+      <button class="play-btn" id="playBtn">&#9654;</button>
+      <button class="skip" id="fwd">10s &#9654;</button>
+    </div>
+  </div>
+
+  <div class="actions">
+    <div class="btn-row">
+      <button class="btn-big btn-set"    id="btnSet"    disabled>&#9679; Set Point</button>
+      <button class="btn-big btn-resume" id="btnResume" disabled>&#9654; Resume from Point</button>
+    </div>
+    <button class="btn-reset" id="btnReset" disabled>Reset point</button>
+  </div>
+</div>
+
+<audio id="audio"></audio>
+
+<script>
+'use strict';
+
+// ── IndexedDB helpers ────────────────────────────────────────────────────────
+const DB_NAME  = 'startplayback';
+const DB_STORE = 'clips';
+
+function dbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+    r.onsuccess = e => res(e.target.result);
+    r.onerror   = e => rej(e.target.error);
+  });
+}
+
+async function dbSave(blob, name) {
+  const db = await dbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put({ blob, name }, 'clip');
+    tx.oncomplete = res;
+    tx.onerror    = e => rej(e.target.error);
+  });
+}
+
+async function dbLoad() {
+  const db = await dbOpen();
+  return new Promise((res, rej) => {
+    const r = db.transaction(DB_STORE, 'readonly')
+                .objectStore(DB_STORE).get('clip');
+    r.onsuccess = e => res(e.target.result ?? null);
+    r.onerror   = e => rej(e.target.error);
+  });
+}
+
+// ── Elements ─────────────────────────────────────────────────────────────────
+const upload   = document.getElementById('upload');
+const fileIn   = document.getElementById('fileInput');
+const upTitle  = document.getElementById('upTitle');
+const upSub    = document.getElementById('upSub');
+const player   = document.getElementById('player');
+const seekEl   = document.getElementById('seek');
+const pip      = document.getElementById('pip');
+const tCur     = document.getElementById('tCur');
+const tDur     = document.getElementById('tDur');
+const playBtn  = document.getElementById('playBtn');
+const back     = document.getElementById('back');
+const fwd      = document.getElementById('fwd');
+const btnSet   = document.getElementById('btnSet');
+const btnResume= document.getElementById('btnResume');
+const btnReset = document.getElementById('btnReset');
+const audio    = document.getElementById('audio');
+
+let startPt = null;   // seconds | null
+let blobURL = null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmt(t) {
+  if (!isFinite(t) || t < 0) return '0:00';
+  return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+}
+
+// ── Load a clip into the UI ───────────────────────────────────────────────────
+function showClip(blob, name) {
+  if (blobURL) URL.revokeObjectURL(blobURL);
+  blobURL = URL.createObjectURL(blob);
+  audio.src = blobURL;
+  upTitle.textContent = name;
+  upSub.textContent   = 'Tap to replace';
+  upload.classList.add('loaded');
+  player.classList.add('show');
+  btnSet.disabled = false;
+}
+
+// ── Start point management ────────────────────────────────────────────────────
+function applyStart(t) {
+  startPt = t;
+  if (t !== null) {
+    localStorage.setItem('startPt', t);
+    btnResume.disabled = false;
+    btnReset.disabled  = false;
+    placePip();
+  } else {
+    localStorage.removeItem('startPt');
+    btnResume.disabled = true;
+    btnReset.disabled  = true;
+    pip.classList.remove('show');
+  }
+}
+
+function placePip() {
+  if (startPt === null || !isFinite(audio.duration) || audio.duration === 0) return;
+  pip.style.left = `${(startPt / audio.duration) * 100}%`;
+  pip.classList.add('show');
+}
+
+// ── File input ────────────────────────────────────────────────────────────────
+fileIn.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  showClip(f, f.name);
+  applyStart(null);
+  dbSave(f, f.name);
+});
+
+// ── Drag and drop ─────────────────────────────────────────────────────────────
+upload.addEventListener('dragover',  e => { e.preventDefault(); upload.classList.add('drag'); });
+upload.addEventListener('dragleave', e => {
+  if (!upload.contains(e.relatedTarget)) upload.classList.remove('drag');
+});
+upload.addEventListener('drop', e => {
+  e.preventDefault();
+  upload.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (!f?.type.startsWith('audio/')) return;
+  showClip(f, f.name);
+  applyStart(null);
+  dbSave(f, f.name);
+});
+
+// ── Audio events ──────────────────────────────────────────────────────────────
+audio.addEventListener('loadedmetadata', () => {
+  seekEl.max      = audio.duration;
+  tDur.textContent = fmt(audio.duration);
+  const saved = localStorage.getItem('startPt');
+  if (saved !== null) applyStart(parseFloat(saved));
+});
+
+audio.addEventListener('timeupdate', () => {
+  seekEl.value    = audio.currentTime;
+  tCur.textContent = fmt(audio.currentTime);
+});
+
+audio.addEventListener('play',  () => { playBtn.innerHTML = '&#9646;&#9646;'; });
+audio.addEventListener('pause', () => { playBtn.innerHTML = '&#9654;'; });
+audio.addEventListener('ended', () => { playBtn.innerHTML = '&#9654;'; });
+
+// ── Seek bar ──────────────────────────────────────────────────────────────────
+seekEl.addEventListener('input', () => { audio.currentTime = +seekEl.value; });
+
+// ── Transport ─────────────────────────────────────────────────────────────────
+playBtn.addEventListener('click', () => audio.paused ? audio.play() : audio.pause());
+back.addEventListener('click', () => { audio.currentTime = Math.max(0, audio.currentTime - 10); });
+fwd.addEventListener('click',  () => { audio.currentTime = Math.min(audio.duration, audio.currentTime + 10); });
+
+// ── Action buttons ────────────────────────────────────────────────────────────
+btnSet.addEventListener('click', () => {
+  applyStart(audio.currentTime);
+  btnSet.classList.remove('flash');
+  void btnSet.offsetWidth; // restart animation
+  btnSet.classList.add('flash');
+});
+
+btnResume.addEventListener('click', () => {
+  if (startPt !== null) {
+    audio.currentTime = startPt;
+    audio.play();
+  }
+});
+
+btnReset.addEventListener('click', () => applyStart(null));
+
+// ── Keyboard shortcut: Space = play/pause ─────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+  if (e.code === 'Space') { e.preventDefault(); audio.paused ? audio.play() : audio.pause(); }
+});
+
+// ── Init: restore from IndexedDB ──────────────────────────────────────────────
+(async () => {
+  const clip = await dbLoad();
+  if (clip) showClip(clip.blob, clip.name);
+  // start point is restored in the loadedmetadata handler
+})();
+</script>
+</body>
+</html>

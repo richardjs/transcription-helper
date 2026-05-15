@@ -1,0 +1,17 @@
+A web app that:
+
+- Allows a user to upload a short audio clip
+- Stores that audio clip in local storage
+- Plays back that audio clip
+- Has a big button for the user to set a start point
+- Another big button to resume from that start point
+- (Smaller buttons to reset start point, etc.)
+- Has a mobile-friendly interface
+
+The use case is a musician transcribing some music. They'll probably
+want to hear a specific section multiple times, from a consistent starting
+place.
+
+But the interface should be simple. You can assume they are only working with
+one clip at a time. Focus on a streamlined workflow that stays out of their way
+and doesn't require them to leave the flow state.
