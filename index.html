@@ -368,9 +368,18 @@ audio.addEventListener('timeupdate', () => {
   tCur.textContent = fmt(audio.currentTime);
 });
 
-audio.addEventListener('play',  () => { playBtn.innerHTML = '&#9646;&#9646;'; });
-audio.addEventListener('pause', () => { playBtn.innerHTML = '&#9654;'; });
-audio.addEventListener('ended', () => { playBtn.innerHTML = '&#9654;'; });
+audio.addEventListener('play',  () => {
+  playBtn.innerHTML = '&#9646;&#9646;';
+  btnResume.innerHTML = '&#9646;&#9646; Pause';
+});
+audio.addEventListener('pause', () => {
+  playBtn.innerHTML = '&#9654;';
+  btnResume.innerHTML = '&#9654; Resume from Point';
+});
+audio.addEventListener('ended', () => {
+  playBtn.innerHTML = '&#9654;';
+  btnResume.innerHTML = '&#9654; Resume from Point';
+});
 
 // ── Seek bar ──────────────────────────────────────────────────────────────────
 seekEl.addEventListener('input', () => { audio.currentTime = +seekEl.value; });
@@ -394,12 +403,16 @@ btnSet.addEventListener('click', () => {
   btnSet.classList.add('flash');
 });
 
-btnResume.addEventListener('click', () => {
-  if (startPt !== null) {
-    audio.currentTime = startPt;
+function resumeOrPause() {
+  if (audio.paused) {
+    if (startPt !== null) audio.currentTime = startPt;
     audio.play();
+  } else {
+    audio.pause();
   }
-});
+}
+
+btnResume.addEventListener('click', resumeOrPause);
 
 btnReset.addEventListener('click', () => applyStart(null));
 
@@ -409,7 +422,7 @@ document.addEventListener('keydown', e => {
   switch (e.code) {
     case 'Space':
       e.preventDefault();
-      audio.paused ? audio.play() : audio.pause();
+      resumeOrPause();
       break;
     case 'KeyS':
       if (!btnSet.disabled) {
