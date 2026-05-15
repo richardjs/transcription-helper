@@ -175,6 +175,11 @@
     .btn-reset:hover:not(:disabled) { color: #ef4444; }
     .btn-reset:disabled { opacity: 0.3; cursor: default; }
 
+    .hints {
+      font-size: 0.72rem; color: #333;
+      text-align: center; letter-spacing: 0.03em;
+    }
+
     audio { display: none; }
   </style>
 </head>
@@ -212,6 +217,7 @@
     </div>
     <button class="btn-reset" id="btnReset" disabled>Reset point</button>
   </div>
+  <p class="hints">Space &nbsp;play/pause &nbsp;·&nbsp; S &nbsp;set point &nbsp;·&nbsp; R &nbsp;resume</p>
 </div>
 
 <audio id="audio"></audio>
@@ -379,10 +385,26 @@ btnResume.addEventListener('click', () => {
 
 btnReset.addEventListener('click', () => applyStart(null));
 
-// ── Keyboard shortcut: Space = play/pause ─────────────────────────────────────
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
-  if (e.code === 'Space') { e.preventDefault(); audio.paused ? audio.play() : audio.pause(); }
+  switch (e.code) {
+    case 'Space':
+      e.preventDefault();
+      audio.paused ? audio.play() : audio.pause();
+      break;
+    case 'KeyS':
+      if (!btnSet.disabled) {
+        applyStart(audio.currentTime);
+        btnSet.classList.remove('flash');
+        void btnSet.offsetWidth;
+        btnSet.classList.add('flash');
+      }
+      break;
+    case 'KeyR':
+      if (!btnResume.disabled) btnResume.click();
+      break;
+  }
 });
 
 // ── Init: restore from IndexedDB ──────────────────────────────────────────────
