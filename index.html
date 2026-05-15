@@ -470,6 +470,11 @@ function resumeOrPause() {
 btnResume.addEventListener('click', resumeOrPause);
 
 
+// Blur buttons after click so keyboard shortcuts work immediately after
+document.addEventListener('click', e => {
+  if (e.target.tagName === 'BUTTON') e.target.blur();
+});
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
