@@ -166,10 +166,18 @@
     .btn-set {
       background: #f59e0b; color: #111;
       flex: 1; min-height: 56px; font-size: 0.82rem;
+      flex-direction: column; gap: 0.1rem;
     }
     .btn-end {
       background: #818cf8; color: #fff;
       flex: 1; min-height: 56px; font-size: 0.82rem;
+      flex-direction: column; gap: 0.1rem;
+    }
+    .btn-time {
+      font-size: 0.75rem; font-weight: 500;
+      letter-spacing: 0; text-transform: none;
+      font-variant-numeric: tabular-nums;
+      opacity: 0.75; min-height: 1em;
     }
     .btn-resume {
       background: #22c55e; color: #fff;
@@ -219,8 +227,14 @@
 
   <div class="actions">
     <div class="btn-row">
-      <button class="btn-big btn-set" id="btnSet" disabled>&#9679; Set Start</button>
-      <button class="btn-big btn-end" id="btnEnd" disabled>&#9679; Set End</button>
+      <button class="btn-big btn-set" id="btnSet" disabled>
+        <span>&#9679; Set Start</span>
+        <span class="btn-time" id="startTime"></span>
+      </button>
+      <button class="btn-big btn-end" id="btnEnd" disabled>
+        <span>&#9679; Set End</span>
+        <span class="btn-time" id="endTime"></span>
+      </button>
     </div>
     <button class="btn-big btn-resume" id="btnResume" disabled>&#9654; Resume from Point</button>
   </div>
@@ -281,9 +295,11 @@ const back      = document.getElementById('back');
 const fwd       = document.getElementById('fwd');
 const nudgeBack = document.getElementById('nudgeBack');
 const nudgeFwd  = document.getElementById('nudgeFwd');
-const btnSet   = document.getElementById('btnSet');
-const btnEnd   = document.getElementById('btnEnd');
-const btnResume= document.getElementById('btnResume');
+const btnSet    = document.getElementById('btnSet');
+const btnEnd    = document.getElementById('btnEnd');
+const btnResume = document.getElementById('btnResume');
+const startTime = document.getElementById('startTime');
+const endTime   = document.getElementById('endTime');
 const audio    = document.getElementById('audio');
 
 let startPt = null;   // seconds | null
@@ -312,6 +328,7 @@ function showClip(blob, name) {
 // ── Start point management ────────────────────────────────────────────────────
 function applyStart(t) {
   startPt = t;
+  startTime.textContent = t !== null ? fmt(t) : '';
   if (t !== null) {
     localStorage.setItem('startPt', t);
     btnResume.disabled = false;
@@ -332,6 +349,7 @@ function placePip() {
 // ── End point management ──────────────────────────────────────────────────────
 function applyEnd(t) {
   endPt = t;
+  endTime.textContent = t !== null ? fmt(t) : '';
   if (t !== null) {
     localStorage.setItem('endPt', t);
     placeEndPip();
