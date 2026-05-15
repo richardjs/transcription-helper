@@ -173,17 +173,7 @@
     .btn-set.flash { animation: flash .4s ease-out; }
     @keyframes flash { 0% { filter: brightness(2.2); } 100% { filter: brightness(1); } }
 
-    .btn-reset {
-      background: none; border: none; color: #3a3a3a;
-      font-size: 0.82rem; cursor: pointer;
-      text-decoration: underline; text-underline-offset: 3px;
-      padding: 0.3rem; align-self: center;
-      transition: color .15s;
-    }
-    .btn-reset:hover:not(:disabled) { color: #ef4444; }
-    .btn-reset:disabled { opacity: 0.3; cursor: default; }
-
-    .hints {
+.hints {
       font-size: 0.72rem; color: #333;
       text-align: center; letter-spacing: 0.03em;
     }
@@ -225,7 +215,6 @@
       <button class="btn-big btn-set"    id="btnSet"    disabled>&#9679; Set Point</button>
       <button class="btn-big btn-resume" id="btnResume" disabled>&#9654; Resume from Point</button>
     </div>
-    <button class="btn-reset" id="btnReset" disabled>Reset point</button>
   </div>
   <p class="hints">Space &nbsp;play/pause &nbsp;·&nbsp; S &nbsp;set point &nbsp;·&nbsp; R &nbsp;resume &nbsp;·&nbsp; &#8592;&#8594; &nbsp;nudge 1s</p>
 </div>
@@ -285,7 +274,6 @@ const nudgeBack = document.getElementById('nudgeBack');
 const nudgeFwd  = document.getElementById('nudgeFwd');
 const btnSet   = document.getElementById('btnSet');
 const btnResume= document.getElementById('btnResume');
-const btnReset = document.getElementById('btnReset');
 const audio    = document.getElementById('audio');
 
 let startPt = null;   // seconds | null
@@ -315,12 +303,10 @@ function applyStart(t) {
   if (t !== null) {
     localStorage.setItem('startPt', t);
     btnResume.disabled = false;
-    btnReset.disabled  = false;
     placePip();
   } else {
     localStorage.removeItem('startPt');
     btnResume.disabled = true;
-    btnReset.disabled  = true;
     pip.classList.remove('show');
   }
 }
@@ -414,7 +400,6 @@ function resumeOrPause() {
 
 btnResume.addEventListener('click', resumeOrPause);
 
-btnReset.addEventListener('click', () => applyStart(null));
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
