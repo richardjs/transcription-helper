@@ -35,6 +35,30 @@
       gap: 1rem;
     }
 
+    /* --- Source picker tabs --- */
+    .source-tabs {
+      display: flex;
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 4px;
+      gap: 4px;
+    }
+    .tab {
+      flex: 1;
+      background: none;
+      border: none;
+      border-radius: 9px;
+      padding: 0.55rem 0;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: #555;
+      cursor: pointer;
+      transition: color .15s, background .15s;
+    }
+    .tab.active { background: #2a2a2a; color: #ddd; }
+    .tab:hover:not(.active) { color: #888; }
+
     /* --- Upload zone --- */
     .upload {
       background: #1a1a1a;
@@ -61,6 +85,60 @@
       pointer-events: none;
     }
     .up-sub { font-size: 0.8rem; color: #555; pointer-events: none; }
+
+    /* --- YouTube URL input --- */
+    .yt-zone {
+      background: #1a1a1a;
+      border: 2px solid #252525;
+      border-radius: 12px;
+      padding: 1.1rem 1.25rem;
+      display: none;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .yt-zone.show { display: flex; }
+    .yt-zone label { font-size: 0.82rem; color: #666; }
+    .yt-input-row { display: flex; gap: 0.5rem; }
+    .yt-input {
+      flex: 1;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #ddd;
+      font-size: 0.88rem;
+      padding: 0.55rem 0.75rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .yt-input:focus { border-color: #f00; }
+    .yt-load {
+      background: #c00;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.55rem 0.85rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    .yt-load:hover { background: #e00; }
+    .yt-error { font-size: 0.78rem; color: #f87171; display: none; }
+    .yt-error.show { display: block; }
+    .yt-title { font-size: 0.88rem; color: #aaa; display: none; word-break: break-word; }
+    .yt-title.show { display: block; }
+
+    /* --- YouTube embed container --- */
+    .yt-embed {
+      border-radius: 12px;
+      overflow: hidden;
+      display: none;
+      background: #000;
+      aspect-ratio: 16/9;
+    }
+    .yt-embed.show { display: block; }
+    .yt-embed iframe { width: 100%; height: 100%; display: block; border: none; }
 
     /* --- Player --- */
     .player {
@@ -212,12 +290,34 @@
 <h1>Transcription Helper</h1>
 
 <div class="wrap">
+  <!-- Source mode tabs -->
+  <div class="source-tabs">
+    <button class="tab active" id="tabFile">&#128190; Audio File</button>
+    <button class="tab"        id="tabYT">&#9654; YouTube</button>
+  </div>
+
+  <!-- File upload zone -->
   <div class="upload" id="upload">
     <input type="file" id="fileInput" accept="audio/*">
     <div class="up-title" id="upTitle">Tap to upload audio</div>
     <div class="up-sub"   id="upSub">or drag and drop a file</div>
   </div>
 
+  <!-- YouTube URL zone -->
+  <div class="yt-zone" id="ytZone">
+    <label>YouTube URL or video ID</label>
+    <div class="yt-input-row">
+      <input type="text" class="yt-input" id="ytInput" placeholder="https://youtube.com/watch?v=…">
+      <button class="yt-load" id="ytLoad">Load</button>
+    </div>
+    <div class="yt-error" id="ytError">Couldn't find a valid YouTube video ID.</div>
+    <div class="yt-title" id="ytTitle"></div>
+  </div>
+
+  <!-- YouTube embed -->
+  <div class="yt-embed" id="ytEmbed"></div>
+
+  <!-- Transport player (shared) -->
   <div class="player" id="player">
     <div class="seek-wrap">
       <input type="range" class="seek" id="seek" min="0" max="1" step="any" value="0">
@@ -296,17 +396,39 @@ async function dbLoad() {
   });
 }
 
+// ── YouTube video ID extraction ──────────────────────────────────────────────
+function extractYtId(raw) {
+  const s = raw.trim();
+  // bare ID (11 chars, word chars + dash)
+  if (/^[\w-]{11}$/.test(s)) return s;
+  try {
+    const u = new URL(s);
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('?')[0];
+    return u.searchParams.get('v');
+  } catch {
+    return null;
+  }
+}
+
 // ── Elements ─────────────────────────────────────────────────────────────────
-const upload   = document.getElementById('upload');
-const fileIn   = document.getElementById('fileInput');
-const upTitle  = document.getElementById('upTitle');
-const upSub    = document.getElementById('upSub');
-const player   = document.getElementById('player');
-const seekEl   = document.getElementById('seek');
-const pip      = document.getElementById('pip');
-const pipEnd   = document.getElementById('pipEnd');
-const tCur     = document.getElementById('tCur');
-const tDur     = document.getElementById('tDur');
+const tabFile   = document.getElementById('tabFile');
+const tabYT     = document.getElementById('tabYT');
+const upload    = document.getElementById('upload');
+const fileIn    = document.getElementById('fileInput');
+const upTitle   = document.getElementById('upTitle');
+const upSub     = document.getElementById('upSub');
+const ytZone    = document.getElementById('ytZone');
+const ytInput   = document.getElementById('ytInput');
+const ytLoad    = document.getElementById('ytLoad');
+const ytError   = document.getElementById('ytError');
+const ytTitleEl = document.getElementById('ytTitle');
+const ytEmbed   = document.getElementById('ytEmbed');
+const player    = document.getElementById('player');
+const seekEl    = document.getElementById('seek');
+const pip       = document.getElementById('pip');
+const pipEnd    = document.getElementById('pipEnd');
+const tCur      = document.getElementById('tCur');
+const tDur      = document.getElementById('tDur');
 const playBtn   = document.getElementById('playBtn');
 const back      = document.getElementById('back');
 const fwd       = document.getElementById('fwd');
@@ -317,11 +439,17 @@ const btnEnd    = document.getElementById('btnEnd');
 const btnResume = document.getElementById('btnResume');
 const startTime = document.getElementById('startTime');
 const endTime   = document.getElementById('endTime');
-const audio    = document.getElementById('audio');
+const audio     = document.getElementById('audio');
 
-let startPt = null;   // seconds | null
-let endPt   = null;   // seconds | null
-let blobURL = null;
+// ── State ─────────────────────────────────────────────────────────────────────
+let startPt  = null;
+let endPt    = null;
+let blobURL  = null;
+let mode     = 'file';   // 'file' | 'yt'
+let ytPlayer = null;     // YouTube IFrame player instance
+let ytReady  = false;
+let ytDur    = 0;
+let pollId   = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmt(t) {
@@ -329,20 +457,43 @@ function fmt(t) {
   return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 }
 
-// ── Load a clip into the UI ───────────────────────────────────────────────────
-function showClip(blob, name) {
-  if (blobURL) URL.revokeObjectURL(blobURL);
-  blobURL = URL.createObjectURL(blob);
-  audio.src = blobURL;
-  upTitle.textContent = name;
-  upSub.textContent   = 'Tap to replace';
-  upload.classList.add('loaded');
-  player.classList.add('show');
-  btnSet.disabled = false;
-  btnEnd.disabled = false;
+function currentTime() {
+  return mode === 'yt' && ytPlayer ? (ytPlayer.getCurrentTime?.() ?? 0) : audio.currentTime;
 }
 
-// ── Start point management ────────────────────────────────────────────────────
+function duration() {
+  return mode === 'yt' ? ytDur : audio.duration;
+}
+
+function isPaused() {
+  if (mode === 'yt') {
+    if (!ytPlayer) return true;
+    const s = ytPlayer.getPlayerState?.();
+    return s !== 1; // 1 = playing
+  }
+  return audio.paused;
+}
+
+// ── Seek bar pips ─────────────────────────────────────────────────────────────
+function placePip() {
+  const dur = duration();
+  if (startPt === null || !isFinite(dur) || dur === 0) return;
+  pip.style.left = `${(startPt / dur) * 100}%`;
+  pip.classList.add('show');
+}
+
+function placeEndPip() {
+  const dur = duration();
+  if (endPt === null || !isFinite(dur) || dur === 0) return;
+  pipEnd.style.left = `${(endPt / dur) * 100}%`;
+  pipEnd.classList.add('show');
+}
+
+function updateEndBtnState() {
+  btnEnd.disabled = startPt !== null && currentTime() < startPt;
+}
+
+// ── Start / end point management ──────────────────────────────────────────────
 function applyStart(t) {
   startPt = t;
   startTime.textContent = t !== null ? fmt(t) : '';
@@ -359,17 +510,6 @@ function applyStart(t) {
   }
 }
 
-function placePip() {
-  if (startPt === null || !isFinite(audio.duration) || audio.duration === 0) return;
-  pip.style.left = `${(startPt / audio.duration) * 100}%`;
-  pip.classList.add('show');
-}
-
-function updateEndBtnState() {
-  btnEnd.disabled = startPt !== null && audio.currentTime < startPt;
-}
-
-// ── End point management ──────────────────────────────────────────────────────
 function applyEnd(t) {
   endPt = t;
   endTime.textContent = t !== null ? fmt(t) : '';
@@ -382,11 +522,84 @@ function applyEnd(t) {
   }
 }
 
-function placeEndPip() {
-  if (endPt === null || !isFinite(audio.duration) || audio.duration === 0) return;
-  pipEnd.style.left = `${(endPt / audio.duration) * 100}%`;
-  pipEnd.classList.add('show');
+// ── Unified seek / play / pause / nudge ───────────────────────────────────────
+function seekTo(t) {
+  if (mode === 'yt' && ytPlayer) {
+    ytPlayer.seekTo(t, true);
+  } else {
+    audio.currentTime = t;
+  }
+  updateEndBtnState();
 }
+
+function playMedia() {
+  if (mode === 'yt' && ytPlayer) ytPlayer.playVideo();
+  else audio.play();
+}
+
+function pauseMedia() {
+  if (mode === 'yt' && ytPlayer) ytPlayer.pauseVideo();
+  else audio.pause();
+}
+
+function nudge(delta) {
+  const dur = duration();
+  seekTo(Math.max(0, Math.min(dur || 0, currentTime() + delta)));
+}
+
+function setRate(rate) {
+  if (mode === 'yt' && ytPlayer) ytPlayer.setPlaybackRate(rate);
+  else audio.playbackRate = rate;
+}
+
+// ── Play / pause UI sync ──────────────────────────────────────────────────────
+function syncPlayUI(playing) {
+  playBtn.innerHTML  = playing ? '&#9646;&#9646;' : '&#9654;';
+  btnResume.innerHTML = playing ? '&#9646;&#9646; Pause' : '&#9654; Resume from Point';
+}
+
+// ── Local file loading ────────────────────────────────────────────────────────
+function showClip(blob, name) {
+  if (blobURL) URL.revokeObjectURL(blobURL);
+  blobURL = URL.createObjectURL(blob);
+  audio.src = blobURL;
+  upTitle.textContent = name;
+  upSub.textContent   = 'Tap to replace';
+  upload.classList.add('loaded');
+  player.classList.add('show');
+  btnSet.disabled = false;
+  btnEnd.disabled = false;
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(newMode) {
+  mode = newMode;
+  tabFile.classList.toggle('active', newMode === 'file');
+  tabYT.classList.toggle('active',   newMode === 'yt');
+  upload.style.display  = newMode === 'file' ? '' : 'none';
+  ytZone.classList.toggle('show',  newMode === 'yt');
+  ytEmbed.classList.toggle('show', newMode === 'yt' && ytReady);
+
+  // Reset start/end when switching source
+  applyStart(null);
+  applyEnd(null);
+  player.classList.remove('show');
+  syncPlayUI(false);
+  stopPoll();
+
+  if (newMode === 'file') {
+    pauseMedia();
+    ytReady = false;
+    localStorage.removeItem('ytVideoId');
+  }
+  if (newMode === 'yt') {
+    audio.pause();
+    audio.src = '';
+  }
+}
+
+tabFile.addEventListener('click', () => switchTab('file'));
+tabYT.addEventListener('click',   () => switchTab('yt'));
 
 // ── File input ────────────────────────────────────────────────────────────────
 fileIn.addEventListener('change', e => {
@@ -416,7 +629,7 @@ upload.addEventListener('drop', e => {
 
 // ── Audio events ──────────────────────────────────────────────────────────────
 audio.addEventListener('loadedmetadata', () => {
-  seekEl.max      = audio.duration;
+  seekEl.max       = audio.duration;
   tDur.textContent = fmt(audio.duration);
   const savedStart = localStorage.getItem('startPt');
   if (savedStart !== null) applyStart(parseFloat(savedStart));
@@ -425,36 +638,138 @@ audio.addEventListener('loadedmetadata', () => {
 });
 
 audio.addEventListener('timeupdate', () => {
-  seekEl.value    = audio.currentTime;
+  if (mode !== 'file') return;
+  seekEl.value     = audio.currentTime;
   tCur.textContent = fmt(audio.currentTime);
   updateEndBtnState();
-  if (endPt !== null && !audio.paused && audio.currentTime >= endPt) {
-    audio.pause();
-  }
+  if (endPt !== null && !audio.paused && audio.currentTime >= endPt) audio.pause();
 });
 
-audio.addEventListener('play',  () => {
-  playBtn.innerHTML = '&#9646;&#9646;';
-  btnResume.innerHTML = '&#9646;&#9646; Pause';
+audio.addEventListener('play',  () => { if (mode === 'file') syncPlayUI(true); });
+audio.addEventListener('pause', () => { if (mode === 'file') syncPlayUI(false); });
+audio.addEventListener('ended', () => { if (mode === 'file') syncPlayUI(false); });
+
+// ── YouTube IFrame API ────────────────────────────────────────────────────────
+function loadYtApi() {
+  if (window.YT || document.getElementById('yt-api-script')) return;
+  const s = document.createElement('script');
+  s.id  = 'yt-api-script';
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+}
+
+window.onYouTubeIframeAPIReady = function () {
+  window._ytApiReady = true;
+};
+
+function startPoll() {
+  if (pollId) return;
+  pollId = setInterval(ytPoll, 100);
+}
+
+function stopPoll() {
+  if (pollId) { clearInterval(pollId); pollId = null; }
+}
+
+function ytPoll() {
+  if (!ytPlayer || !ytReady) return;
+  const t   = ytPlayer.getCurrentTime?.() ?? 0;
+  const dur = ytPlayer.getDuration?.()    ?? 0;
+  ytDur = dur;
+
+  seekEl.max       = dur;
+  seekEl.value     = t;
+  tCur.textContent = fmt(t);
+  tDur.textContent = fmt(dur);
+  updateEndBtnState();
+
+  const state = ytPlayer.getPlayerState?.();
+  syncPlayUI(state === 1);
+
+  if (endPt !== null && state === 1 && t >= endPt) {
+    ytPlayer.pauseVideo();
+  }
+}
+
+function loadYtVideo(videoId) {
+  ytError.classList.remove('show');
+  localStorage.setItem('ytVideoId', videoId);
+
+  // Inject embed div fresh each time so YT player re-initialises cleanly
+  ytEmbed.innerHTML = '<div id="yt-player-div"></div>';
+  ytEmbed.classList.add('show');
+
+  function createPlayer() {
+    ytReady = false;
+    ytPlayer = new YT.Player('yt-player-div', {
+      videoId,
+      playerVars: { rel: 0, modestbranding: 1 },
+      events: {
+        onReady(e) {
+          ytReady = true;
+          ytDur   = e.target.getDuration();
+          seekEl.max       = ytDur;
+          tDur.textContent = fmt(ytDur);
+          player.classList.add('show');
+          btnSet.disabled = false;
+          btnEnd.disabled = false;
+          startPoll();
+          ytTitleEl.textContent = '';
+          ytTitleEl.classList.remove('show');
+          const savedStart = localStorage.getItem('startPt');
+          if (savedStart !== null) applyStart(parseFloat(savedStart));
+          const savedEnd = localStorage.getItem('endPt');
+          if (savedEnd !== null) applyEnd(parseFloat(savedEnd));
+        },
+        onStateChange(e) {
+          syncPlayUI(e.data === YT.PlayerState.PLAYING);
+        },
+        onError() {
+          ytError.textContent = 'YouTube could not load this video (may be restricted).';
+          ytError.classList.add('show');
+          ytEmbed.classList.remove('show');
+          stopPoll();
+        },
+      },
+    });
+  }
+
+  if (window.YT?.Player) {
+    createPlayer();
+  } else {
+    loadYtApi();
+    const wait = setInterval(() => {
+      if (window._ytApiReady) { clearInterval(wait); createPlayer(); }
+    }, 100);
+  }
+}
+
+ytLoad.addEventListener('click', () => {
+  const id = extractYtId(ytInput.value);
+  if (!id) {
+    ytError.textContent = "Couldn't find a valid YouTube video ID.";
+    ytError.classList.add('show');
+    return;
+  }
+  applyStart(null);
+  applyEnd(null);
+  player.classList.remove('show');
+  stopPoll();
+  loadYtVideo(id);
 });
-audio.addEventListener('pause', () => {
-  playBtn.innerHTML = '&#9654;';
-  btnResume.innerHTML = '&#9654; Resume from Point';
-});
-audio.addEventListener('ended', () => {
-  playBtn.innerHTML = '&#9654;';
-  btnResume.innerHTML = '&#9654; Resume from Point';
+
+ytInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') ytLoad.click();
 });
 
 // ── Seek bar ──────────────────────────────────────────────────────────────────
-seekEl.addEventListener('input', () => { audio.currentTime = +seekEl.value; updateEndBtnState(); });
+seekEl.addEventListener('input', () => {
+  seekTo(+seekEl.value);
+  tCur.textContent = fmt(+seekEl.value);
+});
 
 // ── Transport ─────────────────────────────────────────────────────────────────
-function nudge(delta) {
-  audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + delta));
-}
-
-playBtn.addEventListener('click',   () => audio.paused ? audio.play() : audio.pause());
+playBtn.addEventListener('click',   () => isPaused() ? playMedia() : pauseMedia());
 back.addEventListener('click',      () => nudge(-5));
 fwd.addEventListener('click',       () => nudge(+5));
 nudgeBack.addEventListener('click', () => nudge(-1));
@@ -462,25 +777,25 @@ nudgeFwd.addEventListener('click',  () => nudge(+1));
 
 // ── Action buttons ────────────────────────────────────────────────────────────
 btnSet.addEventListener('click', () => {
-  applyStart(audio.currentTime);
+  applyStart(currentTime());
   btnSet.classList.remove('flash');
   void btnSet.offsetWidth;
   btnSet.classList.add('flash');
 });
 
 btnEnd.addEventListener('click', () => {
-  applyEnd(audio.currentTime);
+  applyEnd(currentTime());
   btnEnd.classList.remove('flash');
   void btnEnd.offsetWidth;
   btnEnd.classList.add('flash');
 });
 
 function resumeOrPause() {
-  if (audio.paused) {
-    if (startPt !== null) audio.currentTime = startPt;
-    audio.play();
+  if (isPaused()) {
+    if (startPt !== null) seekTo(startPt);
+    playMedia();
   } else {
-    audio.pause();
+    pauseMedia();
   }
 }
 
@@ -488,14 +803,13 @@ btnResume.addEventListener('click', resumeOrPause);
 
 document.querySelectorAll('.btn-speed').forEach(btn => {
   btn.addEventListener('click', () => {
-    audio.playbackRate = parseFloat(btn.dataset.rate);
+    setRate(parseFloat(btn.dataset.rate));
     document.querySelectorAll('.btn-speed').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    btn.blur();
   });
 });
 
-
-// Blur buttons after click so keyboard shortcuts work immediately after
 document.addEventListener('click', e => {
   if (e.target.tagName === 'BUTTON') e.target.blur();
 });
@@ -510,7 +824,7 @@ document.addEventListener('keydown', e => {
       break;
     case 'KeyS':
       if (!btnSet.disabled) {
-        applyStart(audio.currentTime);
+        applyStart(currentTime());
         btnSet.classList.remove('flash');
         void btnSet.offsetWidth;
         btnSet.classList.add('flash');
@@ -518,7 +832,7 @@ document.addEventListener('keydown', e => {
       break;
     case 'KeyE':
       if (!btnEnd.disabled) {
-        applyEnd(audio.currentTime);
+        applyEnd(currentTime());
         btnEnd.classList.remove('flash');
         void btnEnd.offsetWidth;
         btnEnd.classList.add('flash');
@@ -538,11 +852,25 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ── Init: restore from IndexedDB ──────────────────────────────────────────────
+// ── Init: restore from localStorage / IndexedDB ───────────────────────────────
 (async () => {
-  const clip = await dbLoad();
-  if (clip) showClip(clip.blob, clip.name);
-  // start point is restored in the loadedmetadata handler
+  const ytId = localStorage.getItem('ytVideoId');
+  if (ytId) {
+    // Manually switch to YouTube tab without calling applyStart/applyEnd,
+    // so saved start/end points survive until onReady restores them.
+    mode = 'yt';
+    tabFile.classList.remove('active');
+    tabYT.classList.add('active');
+    upload.style.display = 'none';
+    ytZone.classList.add('show');
+    ytInput.value = ytId;
+    audio.src = '';
+    loadYtVideo(ytId);
+  } else {
+    const clip = await dbLoad();
+    if (clip) showClip(clip.blob, clip.name);
+    // start/end points restored in loadedmetadata handler
+  }
 })();
 </script>
 </body>
