@@ -19,14 +19,6 @@
       gap: 1rem;
     }
 
-    h1 {
-      font-size: 0.8rem;
-      font-weight: 600;
-      letter-spacing: 0.14em;
-      color: #444;
-      text-transform: uppercase;
-    }
-
     .wrap {
       width: 100%;
       max-width: 460px;
@@ -277,11 +269,6 @@
     .btn-set.flash, .btn-end.flash { animation: flash .4s ease-out; }
     @keyframes flash { 0% { filter: brightness(2.2); } 100% { filter: brightness(1); } }
 
-    .hints {
-      font-size: 0.72rem; color: #333;
-      text-align: center; letter-spacing: 0.03em;
-    }
-
     audio { display: none; }
 
     /* --- Piano keyboard --- */
@@ -426,11 +413,43 @@
       transform: translateX(-50%);
       transition: left .08s, background .15s;
     }
+
+    /* --- Pitch tools collapsible --- */
+    .pitch-tools-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 0.7rem 1.1rem;
+      cursor: pointer;
+      user-select: none;
+      border: none;
+      width: 100%;
+      color: #555;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      transition: color .15s;
+    }
+    .pitch-tools-toggle:hover { color: #888; }
+    .toggle-chevron {
+      font-size: 0.6rem;
+      transition: transform .2s;
+    }
+    .pitch-tools-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height .25s ease;
+    }
+    .pitch-tools-body.open { max-height: 600px; }
   </style>
 </head>
 <body>
-
-<h1>Transcription Helper</h1>
 
 <div class="wrap">
   <!-- Source mode tabs -->
@@ -498,28 +517,31 @@
       <button class="btn-speed active" data-rate="1">1×</button>
     </div>
   </div>
-  <p class="hints">Space &nbsp;resume/pause &nbsp;·&nbsp; S &nbsp;set start &nbsp;·&nbsp; E &nbsp;set end &nbsp;·&nbsp; R &nbsp;resume &nbsp;·&nbsp; &#8592;&#8594; &nbsp;nudge 1s</p>
-
-  <!-- Piano pitch reference -->
-  <div class="piano-wrap">
-    <div class="piano-top">
-      <button class="btn-oct" id="octDown">&#9664;</button>
-      <span id="octLabel">C4 – C5</span>
-      <button class="btn-oct" id="octUp">&#9654;</button>
-    </div>
-    <div class="piano" id="piano"></div>
-  </div>
-
-  <!-- Pitch detection -->
-  <div class="pitch-wrap">
-    <button class="btn-mic" id="btnMic">&#9679; Listen</button>
-    <div class="pitch-read">
-      <div class="pitch-top">
-        <span class="pitch-note" id="pitchNote">–</span>
-        <span class="pitch-cents" id="pitchCents"></span>
+  <!-- Pitch tools (collapsible) -->
+  <button class="pitch-tools-toggle" id="pitchToolsToggle">
+    <span>Pitch Tools</span>
+    <span class="toggle-chevron" id="toggleChevron">&#9654;</span>
+  </button>
+  <div class="pitch-tools-body" id="pitchToolsBody">
+    <div class="piano-wrap">
+      <div class="piano-top">
+        <button class="btn-oct" id="octDown">&#9664;</button>
+        <span id="octLabel">C4 – C6</span>
+        <button class="btn-oct" id="octUp">&#9654;</button>
       </div>
-      <div class="cents-bar">
-        <div class="cents-needle" id="centsNeedle"></div>
+      <div class="piano" id="piano"></div>
+    </div>
+
+    <div class="pitch-wrap">
+      <button class="btn-mic" id="btnMic">&#9679; Listen</button>
+      <div class="pitch-read">
+        <div class="pitch-top">
+          <span class="pitch-note" id="pitchNote">–</span>
+          <span class="pitch-cents" id="pitchCents"></span>
+        </div>
+        <div class="cents-bar">
+          <div class="cents-needle" id="centsNeedle"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1233,6 +1255,17 @@ function stopMic() {
 }
 
 btnMic.addEventListener('click', () => micStream ? stopMic() : startMic());
+
+// ── Pitch tools toggle ────────────────────────────────────────────────────────
+const pitchToolsBody   = document.getElementById('pitchToolsBody');
+const pitchToolsToggle = document.getElementById('pitchToolsToggle');
+const toggleChevron    = document.getElementById('toggleChevron');
+
+pitchToolsToggle.addEventListener('click', () => {
+  const open = pitchToolsBody.classList.toggle('open');
+  toggleChevron.style.transform = open ? 'rotate(90deg)' : '';
+  if (!open) stopMic();
+});
 
 // ── Init: restore from localStorage / IndexedDB ───────────────────────────────
 (async () => {
