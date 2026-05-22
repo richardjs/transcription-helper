@@ -283,6 +283,77 @@
     }
 
     audio { display: none; }
+
+    /* --- Piano keyboard --- */
+    .piano-wrap {
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 1rem 1rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .piano-top {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-size: 0.7rem;
+      color: #444;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .btn-oct {
+      background: none;
+      border: 1px solid #252525;
+      color: #444;
+      border-radius: 5px;
+      width: 22px; height: 18px;
+      font-size: 0.6rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0; line-height: 1;
+      transition: color .15s, border-color .15s;
+    }
+    .btn-oct:hover:not(:disabled) { color: #888; border-color: #3a3a3a; }
+    .btn-oct:disabled { opacity: 0.2; cursor: default; }
+    .piano {
+      position: relative;
+      display: flex;
+      gap: 1px;
+      height: 90px;
+      user-select: none;
+      touch-action: none;
+    }
+    .key-w {
+      flex: 1;
+      background: #d4d4d4;
+      border-radius: 0 0 5px 5px;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 5px;
+      font-size: 0.55rem;
+      font-weight: 600;
+      color: #aaa;
+      transition: background .06s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .key-w:active { background: #bbb; }
+    .key-w.ref    { color: #f59e0b; }
+    .key-b {
+      position: absolute;
+      top: 0;
+      background: #1c1c1c;
+      border-radius: 0 0 4px 4px;
+      height: 58px;
+      z-index: 2;
+      cursor: pointer;
+      transition: background .06s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .key-b:active { background: #444; }
   </style>
 </head>
 <body>
@@ -356,6 +427,16 @@
     </div>
   </div>
   <p class="hints">Space &nbsp;resume/pause &nbsp;·&nbsp; S &nbsp;set start &nbsp;·&nbsp; E &nbsp;set end &nbsp;·&nbsp; R &nbsp;resume &nbsp;·&nbsp; &#8592;&#8594; &nbsp;nudge 1s</p>
+
+  <!-- Piano pitch reference -->
+  <div class="piano-wrap">
+    <div class="piano-top">
+      <button class="btn-oct" id="octDown">&#9664;</button>
+      <span id="octLabel">C4 – C5</span>
+      <button class="btn-oct" id="octUp">&#9654;</button>
+    </div>
+    <div class="piano" id="piano"></div>
+  </div>
 </div>
 
 <audio id="audio"></audio>
@@ -851,6 +932,116 @@ document.addEventListener('keydown', e => {
       break;
   }
 });
+
+// ── Piano pitch reference ─────────────────────────────────────────────────────
+let pianoCtx    = null;
+const heldNotes = new Map();
+let currentOctave = 4;
+const MIN_OCT = 1, MAX_OCT = 7;
+
+const WHITE_SEMITONES = [0, 2, 4, 5, 7, 9, 11, 12];
+const WHITE_LETTERS   = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C'];
+const BLACK_SEMITONES = [1, 3, 6, 8, 10];
+const BLACK_BDRY      = [1, 2, 4, 5, 6];
+const keyFreqMap      = new Map(); // element → current frequency
+
+function getPianoCtx() {
+  if (!pianoCtx) pianoCtx = new AudioContext();
+  if (pianoCtx.state === 'suspended') pianoCtx.resume();
+  return pianoCtx;
+}
+
+function midiFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+function startNote(el) {
+  if (heldNotes.has(el)) return;
+  const freq = keyFreqMap.get(el);
+  if (!freq) return;
+  const ctx = getPianoCtx();
+  const t   = ctx.currentTime;
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(0.35, t + 0.02);
+  env.connect(ctx.destination);
+  const oscs = [[1, 1], [2, 0.07]].map(([h, a]) => {
+    const osc = ctx.createOscillator();
+    const g   = ctx.createGain();
+    osc.type  = 'sine';
+    osc.frequency.value = freq * h;
+    g.gain.value = a;
+    osc.connect(g); g.connect(env);
+    osc.start(t);
+    return osc;
+  });
+  heldNotes.set(el, { env, oscs });
+}
+
+function stopNote(el) {
+  const held = heldNotes.get(el);
+  if (!held) return;
+  heldNotes.delete(el);
+  const ctx = getPianoCtx();
+  const t   = ctx.currentTime;
+  held.env.gain.cancelScheduledValues(t);
+  held.env.gain.setValueAtTime(held.env.gain.value, t);
+  held.env.gain.linearRampToValueAtTime(0, t + 0.06);
+  held.oscs.forEach(o => o.stop(t + 0.08));
+}
+
+const octDownBtn = document.getElementById('octDown');
+const octUpBtn   = document.getElementById('octUp');
+const octLabelEl = document.getElementById('octLabel');
+
+function setOctave(oct) {
+  [...heldNotes.keys()].forEach(stopNote);
+  currentOctave = oct;
+  const base = (oct + 1) * 12; // MIDI note for C of this octave (C4=60)
+  document.querySelectorAll('.key-w').forEach((k, i) => {
+    keyFreqMap.set(k, midiFreq(base + WHITE_SEMITONES[i]));
+    const labelOct = i === 7 ? oct + 1 : oct;
+    k.textContent = (i === 0 || i === 7) ? `${WHITE_LETTERS[i]}${labelOct}` : WHITE_LETTERS[i];
+    k.classList.toggle('ref', oct === 4 && i === 5); // amber on A4 only
+  });
+  document.querySelectorAll('.key-b').forEach((k, i) => {
+    keyFreqMap.set(k, midiFreq(base + BLACK_SEMITONES[i]));
+  });
+  octLabelEl.textContent = `C${oct} – C${oct + 1}`;
+  octDownBtn.disabled = oct <= MIN_OCT;
+  octUpBtn.disabled   = oct >= MAX_OCT;
+}
+
+octDownBtn.addEventListener('click', () => setOctave(currentOctave - 1));
+octUpBtn.addEventListener('click',   () => setOctave(currentOctave + 1));
+
+(function buildPiano() {
+  const el    = document.getElementById('piano');
+  const wPct  = 100 / 8;
+  const bWPct = wPct * 0.62;
+
+  WHITE_LETTERS.forEach((_, i) => {
+    const k = document.createElement('div');
+    k.className = 'key-w';
+    k.addEventListener('pointerdown', e => { e.preventDefault(); startNote(k); });
+    k.addEventListener('pointerup',     () => stopNote(k));
+    k.addEventListener('pointerleave',  () => stopNote(k));
+    k.addEventListener('pointercancel', () => stopNote(k));
+    el.appendChild(k);
+  });
+
+  BLACK_BDRY.forEach((bdry, i) => {
+    const k = document.createElement('div');
+    k.className = 'key-b';
+    k.style.left  = `calc(${bdry * wPct}% - ${bWPct / 2}%)`;
+    k.style.width = `${bWPct}%`;
+    k.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); startNote(k); });
+    k.addEventListener('pointerup',     () => stopNote(k));
+    k.addEventListener('pointerleave',  () => stopNote(k));
+    k.addEventListener('pointercancel', () => stopNote(k));
+    el.appendChild(k);
+  });
+
+  setOctave(4);
+})();
 
 // ── Init: restore from localStorage / IndexedDB ───────────────────────────────
 (async () => {
