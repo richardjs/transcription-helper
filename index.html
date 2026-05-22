@@ -353,6 +353,79 @@
       -webkit-tap-highlight-color: transparent;
     }
     .key-b:active { background: #444; }
+
+    /* --- Pitch detection --- */
+    .pitch-wrap {
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .btn-mic {
+      background: none;
+      border: 1px solid #2a2a2a;
+      color: #555;
+      border-radius: 10px;
+      padding: 0.55rem 0.8rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s;
+    }
+    .btn-mic:hover:not(.active) { color: #aaa; border-color: #3a3a3a; }
+    .btn-mic.active { color: #f87171; border-color: #7f1d1d; }
+    .pitch-read {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .pitch-top {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+    .pitch-note {
+      font-size: 1.9rem;
+      font-weight: 700;
+      color: #ddd;
+      line-height: 1;
+      min-width: 3.2ch;
+      font-variant-numeric: tabular-nums;
+    }
+    .pitch-cents {
+      font-size: 0.78rem;
+      color: #555;
+      font-variant-numeric: tabular-nums;
+      min-width: 4ch;
+      transition: color .1s;
+    }
+    .cents-bar {
+      position: relative;
+      height: 3px;
+      background: #252525;
+      border-radius: 2px;
+    }
+    .cents-bar::before {
+      content: '';
+      position: absolute;
+      left: 50%; top: -2px;
+      width: 1px; height: 7px;
+      background: #333;
+    }
+    .cents-needle {
+      position: absolute;
+      width: 3px; height: 9px;
+      background: #3a3a3a;
+      border-radius: 2px;
+      top: -3px;
+      left: 50%;
+      transform: translateX(-50%);
+      transition: left .08s, background .15s;
+    }
   </style>
 </head>
 <body>
@@ -435,6 +508,20 @@
       <button class="btn-oct" id="octUp">&#9654;</button>
     </div>
     <div class="piano" id="piano"></div>
+  </div>
+
+  <!-- Pitch detection -->
+  <div class="pitch-wrap">
+    <button class="btn-mic" id="btnMic">&#9679; Listen</button>
+    <div class="pitch-read">
+      <div class="pitch-top">
+        <span class="pitch-note" id="pitchNote">–</span>
+        <span class="pitch-cents" id="pitchCents"></span>
+      </div>
+      <div class="cents-bar">
+        <div class="cents-needle" id="centsNeedle"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1041,6 +1128,111 @@ octUpBtn.addEventListener('click',   () => setOctave(currentOctave + 1));
 
   setOctave(4);
 })();
+
+// ── Pitch detection ───────────────────────────────────────────────────────────
+const CHROMATIC   = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const btnMic      = document.getElementById('btnMic');
+const pitchNote   = document.getElementById('pitchNote');
+const pitchCents  = document.getElementById('pitchCents');
+const centsNeedle = document.getElementById('centsNeedle');
+
+let micStream  = null;
+let micSource  = null;
+let pitchTimer = null;
+let detAnalyser = null;
+
+function detectPitch(buf, sampleRate) {
+  const n = buf.length;
+  let rms = 0;
+  for (let i = 0; i < n; i++) rms += buf[i] * buf[i];
+  if (Math.sqrt(rms / n) < 0.01) return null; // silence
+
+  // Autocorrelation
+  const ac = new Float32Array(n);
+  for (let lag = 0; lag < n; lag++)
+    for (let i = 0; i < n - lag; i++) ac[lag] += buf[i] * buf[i + lag];
+
+  // Skip initial downslope, then find highest peak
+  let t = 1;
+  while (t < n - 1 && ac[t] > ac[t - 1]) t++;
+  while (t < n - 1 && ac[t] < ac[t - 1]) t++;
+  let best = t;
+  for (let i = t + 1; i < n - 1; i++) if (ac[i] > ac[best]) best = i;
+
+  if (ac[best] / ac[0] < 0.5) return null; // weak correlation → noisy/unpitched
+
+  // Parabolic interpolation for sub-sample accuracy
+  const y0 = ac[best - 1], y1 = ac[best], y2 = ac[best + 1];
+  const d  = 2 * (2 * y1 - y0 - y2);
+  const lag = d > 0 ? best + (y2 - y0) / d : best;
+
+  return sampleRate / lag;
+}
+
+function showPitch(freq) {
+  const midi    = 12 * Math.log2(freq / 440) + 69;
+  const rounded = Math.round(midi);
+  const cents   = Math.round((midi - rounded) * 100);
+  const name    = CHROMATIC[((rounded % 12) + 12) % 12];
+  const oct     = Math.floor(rounded / 12) - 1;
+  pitchNote.textContent  = `${name}${oct}`;
+  pitchCents.textContent = cents === 0 ? 'in tune' : `${cents > 0 ? '+' : ''}${cents}¢`;
+  const color = Math.abs(cents) <= 10 ? '#22c55e' : Math.abs(cents) <= 25 ? '#f59e0b' : '#f87171';
+  pitchCents.style.color    = color;
+  centsNeedle.style.background = color;
+  centsNeedle.style.left    = `${50 + cents}%`; // ±50¢ maps to 0–100%
+}
+
+function clearPitch() {
+  pitchNote.textContent   = '–';
+  pitchNote.style.fontSize = '';
+  pitchCents.textContent  = '';
+  pitchCents.style.color = '#555';
+  centsNeedle.style.background = '#3a3a3a';
+  centsNeedle.style.left = '50%';
+}
+
+async function startMic() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    pitchNote.textContent   = 'HTTPS required';
+    pitchNote.style.fontSize = '0.78rem';
+    pitchCents.textContent  = '';
+    return;
+  }
+  try {
+    const ctx = getPianoCtx(); // must be within user-gesture call stack
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    micSource  = ctx.createMediaStreamSource(micStream);
+    detAnalyser = ctx.createAnalyser();
+    detAnalyser.fftSize = 2048;
+    micSource.connect(detAnalyser);
+    const buf = new Float32Array(detAnalyser.fftSize);
+    pitchTimer = setInterval(() => {
+      detAnalyser.getFloatTimeDomainData(buf);
+      const freq = detectPitch(buf, ctx.sampleRate);
+      freq ? showPitch(freq) : clearPitch();
+    }, 80);
+    btnMic.innerHTML = '&#9632; Stop';
+    btnMic.classList.add('active');
+  } catch (e) {
+    pitchNote.textContent  = e.name === 'NotAllowedError' ? 'Denied' : 'Error';
+    pitchCents.textContent = '';
+    micStream?.getTracks().forEach(t => t.stop());
+    micStream = null;
+  }
+}
+
+function stopMic() {
+  clearInterval(pitchTimer); pitchTimer = null;
+  micSource?.disconnect(); micSource = null;
+  micStream?.getTracks().forEach(t => t.stop()); micStream = null;
+  detAnalyser = null;
+  clearPitch();
+  btnMic.innerHTML = '&#9679; Listen';
+  btnMic.classList.remove('active');
+}
+
+btnMic.addEventListener('click', () => micStream ? stopMic() : startMic());
 
 // ── Init: restore from localStorage / IndexedDB ───────────────────────────────
 (async () => {
